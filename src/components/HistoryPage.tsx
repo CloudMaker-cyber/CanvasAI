@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import DownloadButton from './DownloadButton'
 import type { HistoryItem } from '../storage/history'
 
 interface HistoryPageProps {
   history: HistoryItem[]
+  sources: Record<string, string>
   onDelete: (id: string) => void
 }
 
@@ -16,9 +18,10 @@ function formatTime(timestamp: number): string {
   })
 }
 
-export default function HistoryPage({ history, onDelete }: HistoryPageProps) {
+export default function HistoryPage({ history, sources, onDelete }: HistoryPageProps) {
   const [selectedId, setSelectedId] = useState('')
   const selected = history.find((item) => item.id === selectedId) ?? history[0]
+  const srcOf = (item: HistoryItem) => sources[item.id] ?? item.url
 
   if (!selected) {
     return (
@@ -50,7 +53,7 @@ export default function HistoryPage({ history, onDelete }: HistoryPageProps) {
                 className="flex min-w-0 flex-1 items-start gap-3 p-2 text-left"
               >
                 <img
-                  src={item.url}
+                  src={srcOf(item)}
                   alt=""
                   className="h-14 w-14 shrink-0 rounded-lg object-cover"
                 />
@@ -76,7 +79,7 @@ export default function HistoryPage({ history, onDelete }: HistoryPageProps) {
 
         <section className="min-w-0">
           <img
-            src={selected.url}
+            src={srcOf(selected)}
             alt={selected.prompt}
             className="mx-auto max-h-[62vh] rounded-2xl object-contain ring-1 ring-white/10"
           />
@@ -84,6 +87,7 @@ export default function HistoryPage({ history, onDelete }: HistoryPageProps) {
             <p className="text-sm leading-relaxed text-zinc-300">{selected.prompt}</p>
             <p className="mt-2 text-xs text-zinc-500">生成于 {formatTime(selected.createdAt)}</p>
           </div>
+          <DownloadButton key={selected.id} url={srcOf(selected)} timestamp={selected.createdAt} />
         </section>
       </div>
     </main>

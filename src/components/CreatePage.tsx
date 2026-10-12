@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { generateImage, optimizePrompt } from '../api/zhipu'
+import DownloadButton from './DownloadButton'
 import type { HistoryItem } from '../storage/history'
 
 const SIZE_OPTIONS = ['1:1', '4:3', '16:9', '9:16'] as const
@@ -45,15 +46,17 @@ type Status = 'idle' | 'loading' | 'success' | 'error'
 
 interface CreatePageProps {
   history: HistoryItem[]
+  sources: Record<string, string>
   onGenerated: (item: HistoryItem) => void
 }
 
-export default function CreatePage({ history, onGenerated }: CreatePageProps) {
+export default function CreatePage({ history, sources, onGenerated }: CreatePageProps) {
   const [prompt, setPrompt] = useState('')
   const [size, setSize] = useState<SizeOption>('1:1')
   const [style, setStyle] = useState<StyleOption>('自动')
   const [status, setStatus] = useState<Status>('idle')
   const [imageUrl, setImageUrl] = useState('')
+  const [imageCreatedAt, setImageCreatedAt] = useState(0)
   const [errorMsg, setErrorMsg] = useState('')
   const [optimizing, setOptimizing] = useState(false)
 
@@ -100,9 +103,11 @@ export default function CreatePage({ history, onGenerated }: CreatePageProps) {
         prompt: suffix ? `${trimmed}，${suffix}` : trimmed,
         size: SIZE_MAP[size],
       })
+      const createdAt = Date.now()
       setImageUrl(url)
+      setImageCreatedAt(createdAt)
       setStatus('success')
-      onGenerated({ id: crypto.randomUUID(), prompt: trimmed, url, createdAt: Date.now() })
+      onGenerated({ id: crypto.randomUUID(), prompt: trimmed, url, createdAt })
     } catch (error) {
       setErrorMsg(error instanceof Error ? error.message : '生成失败，请重试。')
       setStatus('error')
@@ -116,29 +121,35 @@ export default function CreatePage({ history, onGenerated }: CreatePageProps) {
           释放你的想象力
         </h1>
 
-        <div className="mt-10 flex w-full max-w-2xl items-center gap-2 rounded-full bg-zinc-900 p-2 ring-1 ring-white/10">
+        <div className="mt-10 w-full max-w-2xl rounded-3xl bg-zinc-900 p-3 ring-1 ring-white/10">
           <label htmlFor="prompt" className="sr-only">
             图片描述
           </label>
-          <input
+          <textarea
             id="prompt"
-            type="text"
+            rows={4}
             value={prompt}
             disabled={busy}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !busy) void handleGenerate()
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                if (!busy) void handleGenerate()
+              }
             }}
-            placeholder="描述你想要生成的画面..."
-            className="min-w-0 flex-1 bg-transparent px-4 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none disabled:cursor-not-allowed"
+            placeholder="描述你想要生成的画面：主体、风格、光线、色彩、构图…"
+            className="w-full resize-none bg-transparent px-3 text-sm leading-relaxed text-zinc-100 placeholder:text-zinc-500 focus:outline-none disabled:cursor-not-allowed"
           />
-          <button
-            onClick={() => void handleGenerate()}
-            disabled={busy}
-            className="rounded-full bg-white px-6 py-2.5 text-sm font-medium text-zinc-950 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {generating ? '生成中' : '生成'}
-          </button>
+          <div className="flex items-center justify-between px-3 pb-1">
+            <span className="text-xs text-zinc-500">Enter 生成 · Shift+Enter 换行</span>
+            <button
+              onClick={() => void handleGenerate()}
+              disabled={busy}
+              className="rounded-full bg-white px-6 py-2.5 text-sm font-medium text-zinc-950 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {generating ? '生成中' : '生成'}
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
@@ -208,11 +219,14 @@ export default function CreatePage({ history, onGenerated }: CreatePageProps) {
               </p>
             )}
             {status === 'success' && (
-              <img
-                src={imageUrl}
-                alt={prompt}
-                className="mx-auto max-h-[70vh] rounded-2xl object-contain ring-1 ring-white/10"
-              />
+              <div>
+                <img
+                  src={imageUrl}
+                  alt={prompt}
+                  className="mx-auto max-h-[70vh] rounded-2xl object-contain ring-1 ring-white/10"
+                />
+                <DownloadButton url={imageUrl} timestamp={imageCreatedAt} />
+              </div>
             )}
           </div>
         )}
@@ -225,7 +239,7 @@ export default function CreatePage({ history, onGenerated }: CreatePageProps) {
             {history.slice(0, 4).map((item) => (
               <img
                 key={item.id}
-                src={item.url}
+                src={sources[item.id] ?? item.url}
                 alt={item.prompt}
                 className="aspect-square w-full rounded-2xl object-cover transition-opacity duration-300 hover:opacity-90"
               />
