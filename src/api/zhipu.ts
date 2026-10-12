@@ -59,12 +59,16 @@ const OPTIMIZE_SYSTEM_PROMPT =
   '如果用户描述中已经包含风格意图（如动漫、水彩、油画、像素等），必须保留该风格并围绕它扩写，不得擅自改成写实风格。' +
   '要求：只输出提示词正文，写成连贯的一段话；不要解释、不要引号、不要分点列表。'
 
-export async function optimizePrompt(prompt: string): Promise<string> {
+// styleHint 是下拉框所选风格，仅在描述本身没写明风格时传入，作为补充信息
+export async function optimizePrompt(prompt: string, styleHint?: string): Promise<string> {
+  const userContent = styleHint
+    ? `${prompt}\n（画面风格倾向：${styleHint}，请围绕该风格扩写）`
+    : prompt
   const data = await postJson(CHAT_URL, {
     model: TEXT_MODEL,
     messages: [
       { role: 'system', content: OPTIMIZE_SYSTEM_PROMPT },
-      { role: 'user', content: prompt },
+      { role: 'user', content: userContent },
     ],
   }) as { choices?: { message?: { content?: string } }[] } | null
 

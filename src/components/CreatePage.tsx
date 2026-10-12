@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { generateImage, optimizePrompt } from '../api/zhipu'
+import type { HistoryItem } from '../storage/history'
 
 const SIZE_OPTIONS = ['1:1', '4:3', '16:9', '9:16'] as const
 type SizeOption = (typeof SIZE_OPTIONS)[number]
@@ -31,17 +32,23 @@ const STYLE_SUFFIX: Partial<Record<StyleOption, string>> = {
   像素风: '复古像素艺术风格',
 }
 
+// 下拉框只是提示与补充：描述里已出现风格词时以描述为准，不再拼接所选风格。
+// 关键词表比下拉框更宽，覆盖用户自行写出的风格。
+const STYLE_INTENT =
+  /写实|摄影|照片|纪实|逼真|动漫|二次元|漫画|动画|吉卜力|宫崎骏|新海诚|插画|油画|水彩|水粉|丙烯|素描|速写|手绘|版画|浮世绘|水墨|国风|像素|8-?bit|赛博朋克|蒸汽朋克|扁平|复古|印象派|波普|厚涂|概念艺术|黏土|陶瓷|胶片|渲染|3d|2d/i
+
+function hasStyleIntent(text: string): boolean {
+  return STYLE_INTENT.test(text)
+}
+
 type Status = 'idle' | 'loading' | 'success' | 'error'
 
-// public/gallery 下 4 张为 AI 生成的演示图，接入真实生成历史后整段替换
-const demoImages = [
-  { src: '/gallery/lake.png', alt: '高山湖泊' },
-  { src: '/gallery/dune-grass.png', alt: '海岸草丘' },
-  { src: '/gallery/sunburst.png', alt: '云隙日出' },
-  { src: '/gallery/desert.png', alt: '沙漠沙丘' },
-]
+interface CreatePageProps {
+  history: HistoryItem[]
+  onGenerated: (item: HistoryItem) => void
+}
 
-export default function CreatePage() {
+export default function CreatePage({ history, onGenerated }: CreatePageProps) {
   const [prompt, setPrompt] = useState('')
   const [size, setSize] = useState<SizeOption>('1:1')
   const [style, setStyle] = useState<StyleOption>('自动')
@@ -52,6 +59,7 @@ export default function CreatePage() {
 
   const generating = status === 'loading'
   const busy = generating || optimizing
+  const styleOverridden = style !== '自动' && hasStyleIntent(prompt)
 
   async function handleOptimize() {
     const trimmed = prompt.trim()
@@ -63,7 +71,10 @@ export default function CreatePage() {
     setOptimizing(true)
     setErrorMsg('')
     try {
-      const optimized = await optimizePrompt(trimmed)
+      const optimized = await optimizePrompt(
+        trimmed,
+        style === '自动' || hasStyleIntent(trimmed) ? undefined : style,
+      )
       setPrompt(optimized)
       setStatus((s) => (s === 'error' ? 'idle' : s))
     } catch (error) {
@@ -84,13 +95,14 @@ export default function CreatePage() {
     setStatus('loading')
     setErrorMsg('')
     try {
-      const suffix = STYLE_SUFFIX[style]
+      const suffix = styleOverridden ? undefined : STYLE_SUFFIX[style]
       const url = await generateImage({
         prompt: suffix ? `${trimmed}，${suffix}` : trimmed,
         size: SIZE_MAP[size],
       })
       setImageUrl(url)
       setStatus('success')
+      onGenerated({ id: crypto.randomUUID(), prompt: trimmed, url, createdAt: Date.now() })
     } catch (error) {
       setErrorMsg(error instanceof Error ? error.message : '生成失败，请重试。')
       setStatus('error')
@@ -169,6 +181,12 @@ export default function CreatePage() {
           </button>
         </div>
 
+        {styleOverridden && (
+          <p className="mt-3 text-xs text-zinc-500">
+            描述中已写明风格，以描述为准，风格下拉框不再附加
+          </p>
+        )}
+
         {status !== 'idle' && (
           <div className="mt-10 w-full max-w-2xl">
             {generating && (
@@ -200,19 +218,21 @@ export default function CreatePage() {
         )}
       </section>
 
-      <section className="mt-20 pb-16">
-        <h2 className="text-lg font-medium">近期作品</h2>
-        <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-          {demoImages.map((img) => (
-            <img
-              key={img.src}
-              src={img.src}
-              alt={img.alt}
-              className="aspect-square w-full rounded-2xl object-cover transition-opacity duration-300 hover:opacity-90"
-            />
-          ))}
-        </div>
-      </section>
+      {history.length > 0 && (
+        <section className="mt-20 pb-16">
+          <h2 className="text-lg font-medium">近期作品</h2>
+          <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+            {history.slice(0, 4).map((item) => (
+              <img
+                key={item.id}
+                src={item.url}
+                alt={item.prompt}
+                className="aspect-square w-full rounded-2xl object-cover transition-opacity duration-300 hover:opacity-90"
+              />
+            ))}
+          </div>
+        </section>
+      )}
     </main>
   )
 }
